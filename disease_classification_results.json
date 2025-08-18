@@ -1,0 +1,55 @@
+{
+  "overall": {
+    "accuracy": 0.9937,
+    "auc": 1.0,
+    "sensitivity": 0.9962,
+    "specificity": 0.982,
+    "confusion_matrix": [
+      [
+        109,
+        2
+      ],
+      [
+        2,
+        519
+      ]
+    ]
+  },
+  "diseases": {
+    "AK": {
+      "accuracy": 1.0,
+      "correct": 79,
+      "total": 79,
+      "confidence": 1.0,
+      "true_type": "malignant"
+    },
+    "BCC": {
+      "accuracy": 1.0,
+      "correct": 302,
+      "total": 302,
+      "confidence": 0.999,
+      "true_type": "malignant"
+    },
+    "Bowen病": {
+      "accuracy": 0.959,
+      "correct": 47,
+      "total": 49,
+      "confidence": 0.998,
+      "true_type": "malignant"
+    },
+    "MM": {
+      "accuracy": 1.0,
+      "correct": 91,
+      "total": 91,
+      "confidence": 1.0,
+      "true_type": "malignant"
+    },
+    "SK": {
+      "accuracy": 0.982,
+      "correct": 109,
+      "total": 111,
+      "confidence": 0.995,
+      "true_type": "benign"
+    }
+  }
+}
