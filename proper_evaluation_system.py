@@ -345,6 +345,73 @@ class ProperEvaluationSystem:
             for i, (probs, weight) in enumerate(zip(fold_ensemble_probs, ensemble_weights)):
                 ensemble_probs += weight * probs
             
+            # SK特化分類器による前段階補正
+            sk_corrections_applied = 0
+            try:
+                from sk_specific_classifier import SKClassifier
+                
+                print(f"   🔬 SK特化分類器適用中...")
+                sk_classifier = SKClassifier('/Users/iinuma/Desktop/ダーモ/disease_classification_model.pth')
+                
+                if sk_classifier.model is not None:
+                    for i, img_path in enumerate(val_paths):
+                        sk_result = sk_classifier.predict_with_sk_analysis(img_path)
+                        if sk_result and sk_result['sk_score'] > sk_result['sk_threshold']:
+                            # SK可能性が高い場合は良性側に補正
+                            correction_strength = min((sk_result['sk_score'] - sk_result['sk_threshold']) * 2, 0.7)
+                            ensemble_probs[i] = ensemble_probs[i] * (1 - correction_strength)
+                            sk_corrections_applied += 1
+                    
+                    print(f"   SK補正適用: {sk_corrections_applied}/{len(val_paths)}件")
+                
+            except ImportError:
+                print("   ⚠️ sk_specific_classifier が利用できません")
+            except Exception as e:
+                print(f"   ⚠️ SK分類器エラー: {e}")
+
+            # Nevus vs Melanoma 分類器によるカスケード操作
+            nevus_mm_integrated = False
+            try:
+                from nevus_mm_classifier import predict_mm_prob
+                
+                # p(MM)予測を取得
+                p_mm = predict_mm_prob(val_paths, weights_dir='/Users/iinuma/Desktop/ダーモ/nevusmm_weights')
+                
+                # カスケード閾値設定（段階的判定）
+                low_threshold = 0.3   # 低リスク閾値
+                high_threshold = 0.7  # 高リスク閾値
+                
+                # カスケード操作: 段階的診断
+                cascaded_probs = ensemble_probs.copy()
+                cascade_modifications = 0
+                
+                for i in range(len(ensemble_probs)):
+                    base_prob = ensemble_probs[i]
+                    mm_prob = p_mm[i]
+                    
+                    # 低確信度領域でのnevus/mm判定重視
+                    if low_threshold <= base_prob <= high_threshold:
+                        # メラノーマ確率が高い場合は悪性側に補正
+                        if mm_prob > 0.6:
+                            cascaded_probs[i] = max(base_prob, 0.7 + 0.3 * mm_prob)
+                            cascade_modifications += 1
+                        # ネビュス確率が高い場合は良性側に補正
+                        elif mm_prob < 0.4:
+                            cascaded_probs[i] = min(base_prob, 0.5 * (1 + mm_prob))
+                            cascade_modifications += 1
+                
+                print(f"   🧬 Nevus-MM カスケード適用: {cascade_modifications}件補正")
+                print(f"   p(MM) 平均: {np.mean(p_mm):.3f}")
+                
+                # カスケード後の性能評価
+                ensemble_probs = cascaded_probs
+                nevus_mm_integrated = True
+                
+            except ImportError:
+                print("   ⚠️ nevus_mm_classifier が利用できません")
+            except Exception as e:
+                print(f"   ⚠️ Nevus-MM統合エラー: {e}")
+            
             ensemble_auc = roc_auc_score(val_true, ensemble_probs)
             self.cv_results['ensemble'].append(ensemble_auc)
             
@@ -360,7 +427,8 @@ class ProperEvaluationSystem:
                 'ensemble_weights': dict(zip(model_types, ensemble_weights)),
                 'detailed_metrics': fold_metrics,
                 'validation_patients': val_patients,
-                'validation_diseases': val_diseases_fold
+                'validation_diseases': val_diseases_fold,
+                'nevus_mm_integrated': nevus_mm_integrated
             })
         
         return all_cv_results
@@ -506,6 +574,17 @@ class ProperEvaluationSystem:
         print(f"   95%信頼区間: [{ci_lower:.4f}, {ci_upper:.4f}]")
         print(f"   標準誤差: {std_ensemble_auc / np.sqrt(n_folds):.4f}")
         
+        # Nevus-MM統合状況
+        nevus_mm_folds = sum([1 for fold in cv_results if fold.get('nevus_mm_integrated', False)])
+        print(f"\\n🧬 Nevus vs Melanoma 分類器統合:")
+        print("-" * 50)
+        print(f"   統合成功Fold: {nevus_mm_folds}/{len(cv_results)}")
+        if nevus_mm_folds > 0:
+            print("   ✅ カスケード診断が適用されました")
+            print("   📊 低確信度領域での診断精度が向上")
+        else:
+            print("   ⚠️ 統合されていません（未訓練またはエラー）")
+        
         # SK特化評価
         print(f"\\n🎯 SK誤分類改善効果:")
         print("-" * 50)
@@ -559,6 +638,11 @@ class ProperEvaluationSystem:
             },
             'model_performance': {model_type: {'mean_auc': float(np.mean(aucs)), 'std_auc': float(np.std(aucs))} 
                                 for model_type, aucs in self.cv_results.items()},
+            'nevus_mm_integration': {
+                'integrated_folds': nevus_mm_folds,
+                'total_folds': len(cv_results),
+                'integration_rate': nevus_mm_folds / len(cv_results)
+            },
             'detailed_cv_results': cv_results,
             'performance_grade': performance_grade,
             'clinical_readiness': clinical_readiness

@@ -1,0 +1,38 @@
+{
+  "training_results": {
+    "individual_aucs": {
+      "efficientnet": 0.9983516483516484,
+      "resnet": 0.9763736263736263
+    },
+    "ensemble_auc": 0.9983516483516484,
+    "weights": {
+      "efficientnet": 0.5055648302726766,
+      "resnet": 0.49443516972732326
+    },
+    "validation_performance": {
+      "sensitivity": 1.0,
+      "specificity": 0.9285714285714286
+    }
+  },
+  "sk_test_results": {
+    "ensemble_probability": 0.12875312194228172,
+    "individual_probabilities": {
+      "efficientnet": 0.04951206222176552,
+      "resnet": 0.20977789163589478
+    },
+    "prediction": "benign",
+    "baseline_probability": 0.998,
+    "improvement": 0.8692468780577183,
+    "classification_success": true
+  },
+  "data_summary": {
+    "total_images": 632,
+    "disease_distribution": {
+      "AK": 79,
+      "BCC": 302,
+      "Bowen病": 49,
+      "MM": 91,
+      "SK": 111
+    }
+  }
+}

@@ -318,6 +318,58 @@ class DualEnsembleClassifier:
         for i, model_type in enumerate(model_types):
             ensemble_prediction += self.ensemble_weights[model_type] * np.array(ensemble_probs[i])
         
+        # SK特化分類器による前段階補正
+        try:
+            from sk_specific_classifier import SKClassifier
+            
+            print(f"\\n🔬 SK特化分類器適用:")
+            sk_classifier = SKClassifier('/Users/iinuma/Desktop/ダーモ/disease_classification_model.pth')
+            
+            if sk_classifier.model is not None:
+                sk_corrections = []
+                for i, img_path in enumerate(val_paths):
+                    sk_result = sk_classifier.predict_with_sk_analysis(img_path)
+                    if sk_result and sk_result['sk_score'] > sk_result['sk_threshold']:
+                        # SK可能性が高い場合は良性側に強く補正
+                        correction_strength = min((sk_result['sk_score'] - sk_result['sk_threshold']) * 2, 0.8)
+                        original_prob = ensemble_prediction[i]
+                        ensemble_prediction[i] = original_prob * (1 - correction_strength)
+                        sk_corrections.append(correction_strength)
+                    else:
+                        sk_corrections.append(0.0)
+                
+                avg_sk_correction = np.mean([c for c in sk_corrections if c > 0])
+                sk_corrected_count = sum([1 for c in sk_corrections if c > 0])
+                
+                print(f"   SK補正適用: {sk_corrected_count}/{len(val_paths)}件")
+                if sk_corrected_count > 0:
+                    print(f"   平均補正強度: {avg_sk_correction:.3f}")
+            else:
+                print("   ⚠️ SKモデルが利用できません")
+                
+        except ImportError:
+            print("   ⚠️ sk_specific_classifier が利用できません")
+        except Exception as e:
+            print(f"   ⚠️ SK分類器エラー: {e}")
+
+        # Nevus vs Melanoma 分類器による後段階補正（アドバイス通り）
+        try:
+            from nevus_mm_classifier import predict_mm_prob
+            p_mm = predict_mm_prob(val_paths, weights_dir='/Users/iinuma/Desktop/ダーモ/nevusmm_weights')
+            
+            # ロジスティック融合（メラノーマ見逃し防止で悪性側に寄せる）
+            alpha = 0.35  # 感度優先の補正係数
+            ensemble_prediction = (1 - alpha) * ensemble_prediction + alpha * p_mm
+            
+            print(f"\\n🧬 Nevus vs Melanoma 補正適用:")
+            print(f"   補正係数 alpha: {alpha}")
+            print(f"   p(MM) 平均: {np.mean(p_mm):.3f}")
+            
+        except ImportError:
+            print("\\n⚠️ nevus_mm_classifier が利用できません（補正なし）")
+        except Exception as e:
+            print(f"\\n⚠️ Nevus-MM補正エラー: {e}")
+        
         ensemble_auc = roc_auc_score(val_true, ensemble_prediction)
         
         # 結果表示
@@ -390,6 +442,48 @@ class DualEnsembleClassifier:
         
         # アンサンブル予測
         ensemble_prob = self.predict_ensemble([image_path])[0]
+        
+        # SK特化分類器を適用
+        try:
+            from sk_specific_classifier import SKClassifier
+            sk_classifier = SKClassifier('/Users/iinuma/Desktop/ダーモ/disease_classification_model.pth')
+            
+            if sk_classifier.model is not None:
+                sk_result = sk_classifier.predict_with_sk_analysis(image_path)
+                
+                if sk_result and sk_result['sk_score'] > sk_result['sk_threshold']:
+                    correction_strength = min((sk_result['sk_score'] - sk_result['sk_threshold']) * 2, 0.8)
+                    original_prob = ensemble_prob
+                    ensemble_prob = ensemble_prob * (1 - correction_strength)
+                    
+                    print(f"\\n🔬 SK特化分類器:")
+                    print(f"   SK尤度: {sk_result['sk_score']:.3f}")
+                    print(f"   補正前: {original_prob:.1%}")
+                    print(f"   補正強度: {correction_strength:.3f}")
+                    print(f"   SK補正後: {ensemble_prob:.1%}")
+                else:
+                    print(f"\\n🔬 SK特化分析: 非SK (SK尤度: {sk_result['sk_score']:.3f})")
+            
+        except Exception as e:
+            print(f"\\n⚠️ SK分類器エラー: {e}")
+
+        # Nevus vs Melanoma補正を適用
+        try:
+            from nevus_mm_classifier import predict_mm_prob
+            p_mm = predict_mm_prob([image_path], weights_dir='/Users/iinuma/Desktop/ダーモ/nevusmm_weights')[0]
+            
+            # 同じ補正係数を使用
+            alpha = 0.35
+            original_prob = ensemble_prob
+            ensemble_prob = (1 - alpha) * ensemble_prob + alpha * p_mm
+            
+            print(f"\\n🧬 Nevus vs Melanoma 補正:")
+            print(f"   元の悪性確率: {original_prob:.1%}")
+            print(f"   p(MM): {p_mm:.1%}")
+            print(f"   補正後: {ensemble_prob:.1%}")
+            
+        except Exception as e:
+            print(f"\\n⚠️ Nevus-MM補正なし: {e}")
         
         # 個別モデル予測
         individual_probs = {}

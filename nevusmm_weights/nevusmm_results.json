@@ -1,0 +1,23 @@
+{
+  "cv_scores": [
+    0.94635
+  ],
+  "mean_auc": 0.94635,
+  "std_auc": 0.0,
+  "oof_auc": 0.517764,
+  "confusion_matrix": [
+    [
+      968,
+      32
+    ],
+    [
+      815,
+      185
+    ]
+  ],
+  "accuracy": 0.5765,
+  "n_folds": 5,
+  "total_samples": 2000,
+  "nevus_samples": 1000,
+  "melanoma_samples": 1000
+}

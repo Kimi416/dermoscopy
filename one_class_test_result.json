@@ -1,0 +1,14 @@
+{
+  "one_class_result": {
+    "malignancy_score": 0.013444226828338401,
+    "malignancy_probability": 1.0,
+    "benign_probability": 0.0,
+    "predicted_type": "malignant",
+    "predicted_class": 1,
+    "confidence": 1.0,
+    "anomaly_prediction": 1,
+    "threshold": 0.0
+  },
+  "test_image": "/Users/iinuma/Desktop/ダーモ/images.jpeg",
+  "timestamp": "2025-08-19T09:26:03.515399"
+}

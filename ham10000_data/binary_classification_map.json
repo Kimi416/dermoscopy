@@ -1,0 +1,37 @@
+{
+  "bkl": {
+    "binary_label": 0,
+    "category": "benign",
+    "description": "Benign keratosis-like lesions"
+  },
+  "df": {
+    "binary_label": 0,
+    "category": "benign",
+    "description": "Dermatofibroma"
+  },
+  "nv": {
+    "binary_label": 0,
+    "category": "benign",
+    "description": "Melanocytic nevi"
+  },
+  "vasc": {
+    "binary_label": 0,
+    "category": "benign",
+    "description": "Vascular lesions"
+  },
+  "akiec": {
+    "binary_label": 1,
+    "category": "malignant",
+    "description": "Actinic keratoses"
+  },
+  "bcc": {
+    "binary_label": 1,
+    "category": "malignant",
+    "description": "Basal cell carcinoma"
+  },
+  "mel": {
+    "binary_label": 1,
+    "category": "malignant",
+    "description": "Melanoma"
+  }
+}

@@ -436,6 +436,66 @@ class EnsembleClassifier:
                     ])
                 all_oof_labels = np.concatenate([all_oof_labels, val_labels_fold])
         
+        # SK特化分類器統合（前段階）
+        print(f"\\n🔬 SK特化分類器統合")
+        
+        # 全OOF画像パスを先に収集
+        all_oof_paths = []
+        fold_idx = 0
+        for train_patients, val_patients in skf.split(unique_patients, patient_labels):
+            val_patient_set = set([unique_patients[i] for i in val_patients])
+            val_indices = [i for i, pid in enumerate(patient_ids) if pid in val_patient_set]
+            val_paths = [image_paths[i] for i in val_indices]
+            
+            if fold_idx == 0:
+                all_oof_paths = val_paths.copy()
+            else:
+                all_oof_paths.extend(val_paths)
+            fold_idx += 1
+        
+        sk_corrections_applied = 0
+        
+        try:
+            from sk_specific_classifier import SKClassifier
+            sk_classifier = SKClassifier('/Users/iinuma/Desktop/ダーモ/disease_classification_model.pth')
+            
+            if sk_classifier.model is not None:
+                # ensemble_probsをSK分析で補正
+                for i, img_path in enumerate(all_oof_paths):
+                    if i < len(ensemble_probs):
+                        sk_result = sk_classifier.predict_with_sk_analysis(img_path)
+                        if sk_result and sk_result['sk_score'] > sk_result['sk_threshold']:
+                            # SK可能性が高い場合は良性側に補正
+                            correction_strength = min((sk_result['sk_score'] - sk_result['sk_threshold']) * 2, 0.7)
+                            ensemble_probs[i] = ensemble_probs[i] * (1 - correction_strength)
+                            sk_corrections_applied += 1
+                
+                print(f"   SK補正適用: {sk_corrections_applied}/{len(all_oof_paths)}件")
+            else:
+                print("   ⚠️ SKモデルが利用できません")
+                
+        except ImportError:
+            print("   ⚠️ sk_specific_classifier が利用できません")
+        except Exception as e:
+            print(f"   ⚠️ SK分類器エラー: {e}")
+
+        # Nevus vs Melanoma 分類器によるスタッキング特徴量追加
+        print(f"\\n🧬 Nevus vs Melanoma 分類器統合")
+        nevus_mm_probs = None
+        
+        try:
+            from nevus_mm_classifier import predict_mm_prob
+            
+            # p(MM)予測を取得
+            nevus_mm_probs = predict_mm_prob(all_oof_paths, weights_dir='/Users/iinuma/Desktop/ダーモ/nevusmm_weights')
+            print(f"   p(MM) 平均: {np.mean(nevus_mm_probs):.3f}")
+            print(f"   p(MM) 範囲: [{np.min(nevus_mm_probs):.3f}, {np.max(nevus_mm_probs):.3f}]")
+            
+        except ImportError:
+            print("   ⚠️ nevus_mm_classifier が利用できません")
+        except Exception as e:
+            print(f"   ⚠️ Nevus-MM統合エラー: {e}")
+        
         # OOF結果での重み計算とキャリブレーション
         print(f"\\n🔧 アンサンブル重み計算と確率校正")
         
@@ -461,13 +521,49 @@ class EnsembleClassifier:
             self.temperature_scalers[model_type] = temperature
             print(f"   {model_type} Temperature: {temperature:.3f}")
         
-        # アンサンブル確率計算
-        ensemble_probs = np.zeros_like(all_oof_labels, dtype=float)
+        # LogisticRegression スタッキング（S級アンサンブル）
+        print(f"\\n🏗️ LogisticRegression スタッキング")
+        
+        # 特徴量行列作成
+        X_stack = []
         for model_type in model_types:
             # Temperature scaling適用
             calibrated_logits = all_oof_logits[model_type] / self.temperature_scalers[model_type]
             calibrated_probs = torch.softmax(torch.tensor(calibrated_logits), dim=1)[:, 1].numpy()
-            ensemble_probs += self.weights[model_type] * calibrated_probs
+            X_stack.append(calibrated_probs)
+        
+        X_stack = np.column_stack(X_stack)
+        
+        # Nevus vs Melanoma 特徴量を追加（利用可能な場合）
+        if nevus_mm_probs is not None:
+            X_stack = np.column_stack([X_stack, nevus_mm_probs])
+            print(f"   特徴量: {len(model_types)} + 1 (p(MM))")
+        else:
+            print(f"   特徴量: {len(model_types)} (基本モデルのみ)")
+        
+        # LogisticRegressionで最終予測
+        from sklearn.linear_model import LogisticRegression
+        stacking_model = LogisticRegression(random_state=42, max_iter=1000)
+        stacking_model.fit(X_stack, all_oof_labels)
+        
+        # スタッキング予測
+        ensemble_probs = stacking_model.predict_proba(X_stack)[:, 1]
+        
+        # 特徴量重要度表示
+        feature_names = model_types.copy()
+        if nevus_mm_probs is not None:
+            feature_names.append('nevus_mm')
+        
+        print(f"   LogisticRegression 係数:")
+        for i, (name, coef) in enumerate(zip(feature_names, stacking_model.coef_[0])):
+            print(f"     {name}: {coef:.4f}")
+        
+        # スタッキングモデル保存
+        import pickle
+        with open('/Users/iinuma/Desktop/ダーモ/stacking_model.pkl', 'wb') as f:
+            pickle.dump(stacking_model, f)
+        
+        self.stacking_model = stacking_model
         
         ensemble_auc = roc_auc_score(all_oof_labels, ensemble_probs)
         print(f"\\n🎯 アンサンブル AUC: {ensemble_auc:.4f}")
@@ -482,7 +578,10 @@ class EnsembleClassifier:
             'weights': self.weights,
             'temperature_scalers': self.temperature_scalers,
             'threshold': float(self.threshold),
-            'fold_results': dict(self.fold_results)
+            'fold_results': dict(self.fold_results),
+            'stacking_features': feature_names,
+            'stacking_coefficients': stacking_model.coef_[0].tolist(),
+            'nevus_mm_integrated': nevus_mm_probs is not None
         }
         
         with open('/Users/iinuma/Desktop/ダーモ/ensemble_results.json', 'w', encoding='utf-8') as f:

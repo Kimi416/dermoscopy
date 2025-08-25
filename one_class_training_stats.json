@@ -1,0 +1,19 @@
+{
+  "training_stats": {
+    "total_images": 521,
+    "diseases": {
+      "AK": 79,
+      "BCC": 302,
+      "Bowen病": 49,
+      "MM": 91
+    },
+    "feature_dimension": 1280
+  },
+  "threshold": 0.0,
+  "score_statistics": {
+    "mean": 0.04506434326829305,
+    "std": 0.03463675925188731,
+    "min": -0.08783710802450923,
+    "max": 0.09924444430234552
+  }
+}

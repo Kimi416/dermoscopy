@@ -1,0 +1,40 @@
+{
+  "analysis_date": "2025-08-19T09:27:44.390421",
+  "target_image": "images.jpeg (脂漏性角化症)",
+  "actual_diagnosis": "benign (良性)",
+  "method_results": {
+    "binary_classification": {
+      "prediction": "malignant",
+      "confidence": 99.8,
+      "correct": false
+    },
+    "uncertainty_estimation": {
+      "prediction": "malignant",
+      "confidence": 99.7,
+      "reliability_score": 100.0,
+      "correct": false
+    },
+    "one_class_classification": {
+      "prediction": "malignant",
+      "confidence": 100.0,
+      "correct": false
+    }
+  },
+  "key_findings": [
+    "全手法で一貫した誤分類",
+    "非常に高い確信度での誤判定",
+    "不確実性推定でも確信的な誤分類",
+    "一クラス分類でも同様の問題"
+  ],
+  "root_causes": [
+    "SK特徴と悪性疾患の視覚的類似性",
+    "学習データのSK代表性不足",
+    "深層学習の特徴抽出限界"
+  ],
+  "recommendations": [
+    "SK特化データセット拡充",
+    "専門医協調診断システム",
+    "段階的判定プロセス",
+    "継続学習システム"
+  ]
+}
